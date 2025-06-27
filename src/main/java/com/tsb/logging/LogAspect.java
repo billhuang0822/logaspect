@@ -26,9 +26,8 @@ public class LogAspect {
     public Object logWithMasking(ProceedingJoinPoint joinPoint) throws Throwable {
         String className = joinPoint.getSignature().getDeclaringTypeName();
 
-        boolean included = properties.getIncludePackages().stream().anyMatch(className::startsWith);
         boolean excluded = excludePackages.stream().anyMatch(className::startsWith);
-        if (!included || excluded) return joinPoint.proceed();
+        if (excluded) return joinPoint.proceed();
 
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
