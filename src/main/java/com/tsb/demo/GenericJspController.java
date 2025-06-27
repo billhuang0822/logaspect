@@ -2,7 +2,6 @@ package com.tsb.demo;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
-
 import jakarta.servlet.http.HttpServletRequest;
 
 @Controller
@@ -12,15 +11,20 @@ public class GenericJspController {
     public String forwardJsp(HttpServletRequest request) {
         String path = request.getRequestURI();
 
-        // 避免循環：只處理不含點（.）的路徑
-        if (path.contains(".") || path.equals("/")) {
-            return null; // 放行給靜態資源或 JSP
+        // 只處理不含點(.)且不是/api開頭的路徑
+        if (path.equals("/") || path.contains(".") || path.startsWith("/api")) {
+            return null;
         }
 
-        // 去除開頭的斜線
-        if (path.startsWith("/")) {
-            path = path.substring(1);
+        // 防止 circular（只對原生路徑起作用）
+        String bestPattern = (String) request.getAttribute("org.springframework.web.servlet.HandlerMapping.bestMatchingPattern");
+        if (bestPattern != null && bestPattern.equals("/**")) {
+            if (path.startsWith("/")) {
+                path = path.substring(1);
+            }
+            return path;
         }
-        return path; // 例如 foo/bar/baz -> foo/bar/baz.jsp
+
+        return null;
     }
 }

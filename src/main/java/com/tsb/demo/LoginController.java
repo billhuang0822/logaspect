@@ -8,13 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 
 @Controller
 public class LoginController {
-
-    // 顯示登入頁面
-    @GetMapping("/login")
-    public String loginForm() {
-        return "login";
-    }
-
     // 處理登入
     @PostMapping("/api/login")
     public ModelAndView doLogin(
