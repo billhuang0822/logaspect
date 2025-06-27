@@ -1,7 +1,7 @@
 spring:
   application:
     name: logaspect
-
+  
 logging:
   aspect:
     mode: LOG_ALL
