@@ -5,6 +5,6 @@
 </head>
 <body>
     <h2>登入失敗，請檢查帳號密碼</h2>
-    <a href="/login.jsp">回登入頁</a>
+    <a href="/login">回登入頁</a>
 </body>
 </html>
