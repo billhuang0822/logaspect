@@ -1,1 +1,8 @@
-spring.application.name=logaspect
+spring:
+  application:
+    name: logaspect
+
+logging:
+  aspect:
+    mode: LOG_ALL
+    exclude-packages: []
