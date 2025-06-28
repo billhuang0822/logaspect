@@ -7,5 +7,4 @@ import java.lang.annotation.*;
 public @interface EnableLog {
     String[] maskFields() default {};
     String[] patterns() default {};
-    boolean recursive() default false;
 }

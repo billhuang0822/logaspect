@@ -41,62 +41,76 @@ public class LogAspect {
 
     @Around("logTargets() && !within(com.tsb.logging..*)")
     public Object logAround(ProceedingJoinPoint joinPoint) throws Throwable {
+        long startTime = System.currentTimeMillis();
         Class<?> targetClass = joinPoint.getTarget().getClass();
         String className = targetClass.getName();
-        if (!CollectionUtils.isEmpty(excludePackages)) {
-            for (String pkg : excludePackages) {
-                if (className.startsWith(pkg)) {
-                    return joinPoint.proceed();
+        String methodName = joinPoint.getSignature().getName();
+        Object result = null;
+        Throwable thrown = null;
+        try {
+            if (!CollectionUtils.isEmpty(excludePackages)) {
+                for (String pkg : excludePackages) {
+                    if (className.startsWith(pkg)) {
+                        return joinPoint.proceed();
+                    }
                 }
             }
-        }
-        if ("LOG_NONE".equalsIgnoreCase(logMode)) {
-            return joinPoint.proceed();
-        }
-
-        Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
-        if (hasDisableLog(method, targetClass)) {
-            return joinPoint.proceed();
-        }
-
-        EnableLog enableLog = getEnableLog(method, targetClass);
-
-        Object[] args = joinPoint.getArgs();
-        String[] argNames = ((MethodSignature) joinPoint.getSignature()).getParameterNames();
-        Map<String, Object> argMap = new LinkedHashMap<>();
-        for (int i = 0; i < argNames.length; i++) {
-            argMap.put(argNames[i], args[i]);
-        }
-
-        boolean recursive = false;
-        Map<String, String> fieldMaskMap = new HashMap<>();
-        if (enableLog != null) {
-            recursive = enableLog.recursive();
-            // parse maskFields: field:maskName
-            for (String f : enableLog.maskFields()) {
-                if (f.contains(":")) {
-                    String[] arr = f.split(":", 2);
-                    fieldMaskMap.put(arr[0], arr[1]);
-                } else {
-                    fieldMaskMap.put(f, "star");
-                }
+            if ("LOG_NONE".equalsIgnoreCase(logMode)) {
+                return joinPoint.proceed();
             }
-            maskFields(argMap, fieldMaskMap, enableLog.patterns(), recursive);
-            log.info("[ENABLELOG] {}.{} args: {}", className, method.getName(), argMap);
-        } else {
-            log.info("[LOG] {}.{} args: {}", className, method.getName(), argMap);
+
+            Method method = ((MethodSignature) joinPoint.getSignature()).getMethod();
+            if (hasDisableLog(method, targetClass)) {
+                return joinPoint.proceed();
+            }
+
+            EnableLog enableLog = getEnableLog(method, targetClass);
+
+            Object[] args = joinPoint.getArgs();
+            String[] argNames = ((MethodSignature) joinPoint.getSignature()).getParameterNames();
+            Map<String, Object> argMap = new LinkedHashMap<>();
+            for (int i = 0; i < argNames.length; i++) {
+                argMap.put(argNames[i], args[i]);
+            }
+
+            Map<String, String> fieldMaskMap = new HashMap<>();
+            if (enableLog != null) {
+                // parse maskFields: field:maskName
+                for (String f : enableLog.maskFields()) {
+                    if (f.contains(":")) {
+                        String[] arr = f.split(":", 2);
+                        fieldMaskMap.put(arr[0], arr[1]);
+                    } else {
+                        fieldMaskMap.put(f, "star");
+                    }
+                }
+                maskFields(argMap, fieldMaskMap, enableLog.patterns());
+                log.info("[ENABLELOG] {}.{} args: {}", className, methodName, argMap);
+            } else {
+                log.info("[LOG] {}.{} args: {}", className, methodName, argMap);
+            }
+
+            result = joinPoint.proceed();
+
+            if (enableLog != null && result != null) {
+                Object maskedResult = maskObject(result, fieldMaskMap, enableLog.patterns());
+                log.info("[ENABLELOG] {}.{} result: {}", className, methodName, maskedResult);
+            } else if (result != null) {
+                log.info("[LOG] {}.{} result: {}", className, methodName, result);
+            }
+
+            return result;
+        } catch (Throwable ex) {
+            thrown = ex;
+            throw ex;
+        } finally {
+            long duration = System.currentTimeMillis() - startTime;
+            if (thrown != null) {
+                log.info("[TIME] {}.{} failed cost={}ms", className, methodName, duration);
+            } else {
+                log.info("[TIME] {}.{} cost={}ms", className, methodName, duration);
+            }
         }
-
-        Object result = joinPoint.proceed();
-
-        if (enableLog != null && result != null) {
-            Object maskedResult = maskObject(result, fieldMaskMap, enableLog.patterns(), recursive);
-            log.info("[ENABLELOG] {}.{} result: {}", className, method.getName(), maskedResult);
-        } else if (result != null) {
-            log.info("[LOG] {}.{} result: {}", className, method.getName(), result);
-        }
-
-        return result;
     }
 
     private boolean hasDisableLog(Method method, Class<?> targetClass) {
@@ -112,35 +126,35 @@ public class LogAspect {
         return enableLog;
     }
 
-    private void maskFields(Map<String, Object> argMap, Map<String, String> fieldMaskMap, String[] patterns, boolean recursive) {
+    private void maskFields(Map<String, Object> argMap, Map<String, String> fieldMaskMap, String[] patterns) {
         for (String key : argMap.keySet()) {
             Object val = argMap.get(key);
             if (fieldMaskMap.containsKey(key)) {
                 argMap.put(key, getMaskValue(fieldMaskMap.get(key), val));
             } else if (patterns != null && patterns.length > 0 && val instanceof String) {
                 argMap.put(key, maskByPattern((String) val, patterns));
-            } else if (recursive && (val instanceof Map || isPojo(val))) {
-                argMap.put(key, maskObject(val, fieldMaskMap, patterns, true));
+            } else if (val instanceof Map || isPojo(val)) {
+                argMap.put(key, maskObject(val, fieldMaskMap, patterns));
             }
         }
     }
 
-    private Object maskObject(Object obj, Map<String, String> fieldMaskMap, String[] patterns, boolean recursive) {
+    private Object maskObject(Object obj, Map<String, String> fieldMaskMap, String[] patterns) {
         if (obj == null) return null;
         if (obj instanceof Map) {
             Map<String, Object> map = new LinkedHashMap<>((Map)obj);
-            maskFields(map, fieldMaskMap, patterns, recursive);
+            maskFields(map, fieldMaskMap, patterns);
             return map;
         } else if (obj instanceof Collection) {
             Collection<?> col = (Collection<?>) obj;
             List<Object> masked = new ArrayList<>();
             for (Object item : col) {
-                masked.add(maskObject(item, fieldMaskMap, patterns, recursive));
+                masked.add(maskObject(item, fieldMaskMap, patterns));
             }
             return masked;
         } else if (obj instanceof String && patterns != null && patterns.length > 0) {
             return maskByPattern((String) obj, patterns);
-        } else if (recursive && isPojo(obj)) {
+        } else if (isPojo(obj)) {
             try {
                 Object maskedPojo = obj.getClass().getDeclaredConstructor().newInstance();
                 for (Field field : obj.getClass().getDeclaredFields()) {
@@ -150,8 +164,8 @@ public class LogAspect {
                         field.set(maskedPojo, getMaskValue(fieldMaskMap.get(field.getName()), value));
                     } else if (patterns != null && patterns.length > 0 && value instanceof String) {
                         field.set(maskedPojo, maskByPattern((String) value, patterns));
-                    } else if (recursive && (value instanceof Map || isPojo(value))) {
-                        field.set(maskedPojo, maskObject(value, fieldMaskMap, patterns, true));
+                    } else if (value instanceof Map || isPojo(value)) {
+                        field.set(maskedPojo, maskObject(value, fieldMaskMap, patterns));
                     } else {
                         field.set(maskedPojo, value);
                     }
@@ -173,7 +187,6 @@ public class LogAspect {
                 if(maskStrategy != null){
                     masked = maskStrategy.mask(masked);
                 }else{
-                    // fallback
                     masked = getMaskValue("star", masked);
                 }
             }
