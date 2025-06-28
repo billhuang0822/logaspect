@@ -7,7 +7,7 @@ public class PageConfig {
 	@Bean
 	public InternalResourceViewResolver jspViewResolver() {
 	    InternalResourceViewResolver resolver = new InternalResourceViewResolver();
-	    resolver.setPrefix("/"); // 直接 webapp 根目錄
+	    resolver.setPrefix("/jsp/"); // 指向 webapp/jsp/
 	    resolver.setSuffix(".jsp");
 	    return resolver;
 	}

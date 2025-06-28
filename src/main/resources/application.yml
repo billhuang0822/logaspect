@@ -6,3 +6,6 @@ logging:
   aspect:
     mode: LOG_ALL
     exclude-packages: []
+server:
+  servlet:
+    context-path: /
